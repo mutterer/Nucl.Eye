@@ -1,0 +1,1008 @@
+// Action Bar description file : Nucl_Eye.txt
+// A set of macros used in https://www.biorxiv.org/content/10.1101/673780v1
+
+run("Action Bar","/plugins/ActionBar/Nucl_Eye.txt");
+exit();
+
+<DnDAction>
+file=getArgument();
+print ("Opening file:",file);
+open(file);
+</DnDAction>
+
+<line>
+<button>
+label=New Session
+icon=noicon
+arg=<macro>
+newUID();
+</macro>
+</line>
+
+<line>
+<button>
+label=Reset test image
+icon=noicon
+arg=<macro>
+run("Select None");
+run("Remove Overlay");
+roiManager("reset");
+</macro>
+</line>
+
+<line>
+<button>
+label=z-project
+icon=noicon
+arg=<macro>
+run("Grays");
+run("Z Project...", "projection=[Max Intensity]");
+</macro>
+</line>
+
+<line>
+<button>
+label=try auto seg
+icon=noicon
+arg=<macro>
+id=getImageID;
+roiManager("reset");
+setBatchMode(1);
+run("Duplicate...", "title=nucs");
+run("Median...", "radius=10");
+setAutoThreshold("IsoData dark");
+run("Analyze Particles...", "size=4-Infinity exclude add slice");
+selectImage(id);
+roiManager("Show All Without Labels");
+roiManager("Deselect");
+setBatchMode(0);
+</macro>
+</line>
+
+
+<line>
+<button>
+label=Options...
+icon=noicon
+arg=<macro>
+var sizeThr= call('ij.Prefs.get','histo.selectSmoothness',3);
+var maxNSpots= call('ij.Prefs.get','histo.maxnspots',10);
+var thrFactor= call('ij.Prefs.get','histo.thrFactor',1.5);
+var nucEnlarge= call('ij.Prefs.get','histo.nucEnlarge',2);
+var minSpotDistance= call('ij.Prefs.get','histo.minSpotDistance',4);
+
+Dialog.create("Options");
+Dialog.addNumber("Smoothness factor", sizeThr);
+Dialog.addNumber("Maximum number of Spots", maxNSpots);
+Dialog.addNumber("Spots thresholding factor", thrFactor);
+Dialog.addNumber("Nucleus enlargement (pix)", nucEnlarge);
+Dialog.addNumber("Min distance between spots (pix)", minSpotDistance);
+Dialog.show();
+v= Dialog.getNumber();
+call('ij.Prefs.set','histo.selectSmoothness',v);
+maxNSpots = Dialog.getNumber();
+call('ij.Prefs.set','histo.maxnspots',maxNSpots);
+thrFactor = Dialog.getNumber();
+call('ij.Prefs.set','histo.thrFactor',thrFactor);
+nucEnlarge = Dialog.getNumber();
+call('ij.Prefs.set','histo.nucEnlarge',nucEnlarge);
+minSpotDistance = Dialog.getNumber();
+call('ij.Prefs.set','histo.minSpotDistance',minSpotDistance);
+</macro>
+</line>
+
+<line>
+<button>
+label=Soft Select 1
+icon=noicon
+arg=<tool>
+var smoothness= call('ij.Prefs.get','histo.selectSmoothness',3);
+
+getCursorLoc(x, y, z, flags);
+
+id=getImageID;
+setBatchMode(1);
+
+run("Select None");
+run("Duplicate...","title=a");
+run("Gaussian Blur...", "radius="+smoothness);
+id2=getImageID;
+
+while (flags&16!=0) {
+    selectImage(id);
+    
+    getCursorLoc(x1, y1, z, flags);
+    bf = flags;
+    
+    selectImage(id2);
+    doWand(x, y, 0.5*sqrt((x1-x)*(x1-x)+(y1-y)*(y1-y)), "8-connected");
+    getSelectionCoordinates(xpoints, ypoints);
+    selectImage(id);
+    makeSelection("freehand", xpoints, ypoints);
+    wait(20);
+    flags = bf;
+    
+}
+roiManager('add');
+roiManager("show all with labels");
+roiManager('select',roiManager('count')-1);
+</tool>
+</line>
+
+<line>
+<button>
+label=Split merged ROIs
+icon=noicon
+arg=<tool>
+
+setBatchMode(1);
+getCursorLoc(x, y, z, flags);
+while ( flags&16>0) {
+    getCursorLoc(x1, y1, z, flags);
+    makeLine(x,y,x1,y1);
+    wait(10);
+}
+id=getImageID;
+run("Select None");
+run("Duplicate...", "title=temp");
+makeLine(x,y,x1,y1);
+run("Line to Area");
+roiManager('add');
+run("Create Mask");
+hit=-1;
+for (i=0;i<roiManager('count');i++) {
+    roiManager('select', i);
+    List.setMeasurements;
+    if  (parseInt(List.getValue('Max'))==255) {
+        hit=i;
+        break;
+    }
+}
+selectImage(id);
+rois= newArray(2);
+rois[0] = hit;
+rois[1] = roiManager('count')-1;
+roiManager("select", rois);
+roiManager("AND");
+roiManager("Add");
+rois[1] = roiManager('count')-1;
+roiManager("select", rois);
+roiManager("XOR");
+roiManager("Split");
+roiManager("select", roiManager('count')-3);
+roiManager("delete");
+roiManager("select", roiManager('count')-3);
+roiManager("delete");
+setBatchMode(0);
+
+
+</tool>
+</line>
+
+<line>
+<button>
+label=Select existing ROI
+icon=noicon
+arg=<tool>
+getCursorLoc(x0, y0, z, flags);
+id = getImageID;
+for (i=0;i< roiManager("count");i++) {
+    roiManager("select", i);
+    if (Roi.contains(x0,y0)) break;
+}
+</tool>
+</line>
+
+<line>
+<button> 
+label=Set FM tolerance
+icon=noicon
+arg=<tool>
+roiManager("Show None");
+getCursorLoc(x0,y0,z,m);
+while (m&16!=0) {
+	getCursorLoc(x,y,z,m);
+	n = 128-sqrt((x0-x)*(x0-x))/10;
+	run("Find Maxima...", "noise=&n output=[Point Selection]");
+	getSelectionCoordinates(xp, yp);
+	wait(100);
+}
+call("ij.Prefs.set","ab.FMTol",n);
+roiManager("Show All Without Labels");
+</tool>
+</line>
+
+<line>
+<button>
+label=click & count spots within
+icon=noicon
+arg=<tool>    
+
+getCursorLoc(x0, y0, z, flags);
+
+for (i=0;i< roiManager("count");i++) {
+    roiManager("select", i);
+    if (Roi.contains(x0,y0)) break;
+}
+r=i;
+
+colors=newArray("Red","Green","Blue","Cyan","Magenta","Yellow","White");
+id = getImageID;
+title = getTitle();
+Stack.getDimensions(width, height, channels, slices, frames);
+print("image size : ",width, height, channels, slices, frames);
+Stack.getPosition(channel, slice, frame);
+print("current position : ",channel, slice, frame);
+rtLineOffset = (1+(channels-channel));
+
+run("Set Measurements...", "display redirect=None decimal=6");
+
+sizeThr= call('ij.Prefs.get','histo.selectSmoothness',3);
+maxNSpots= call('ij.Prefs.get','histo.maxnspots',10);
+thrFactor= call('ij.Prefs.get','histo.thrFactor',1.5);
+nucEnlarge= call('ij.Prefs.get','histo.nucEnlarge',2);
+minSpotDistance= call('ij.Prefs.get','histo.minSpotDistance',4);
+
+print("\tCurrent Options : ");
+print("\tSmoothness factor", sizeThr);
+print("\tMaximum number of Spots", maxNSpots);
+print("\tSpots thresholding factor", thrFactor);
+print("\tNucleus enlargement (pix)", nucEnlarge);
+print("\tMin distance between spots (pix)", minSpotDistance);
+
+colors=newArray("Red","Green","Blue","Cyan","Magenta","Yellow","White");
+
+setBatchMode(true);
+
+roiManager("select", r);
+roiName = Roi.getName();
+print("Processing ROI : ",roiName);
+defaultColor = Roi.getDefaultColor;
+run("Enlarge...", "enlarge="+nucEnlarge); 
+nmax = 1000;
+tol=0;
+
+while (nmax>maxNSpots) {
+	tol++;
+	roiManager("select", r);
+	run("Enlarge...", "enlarge="+nucEnlarge); 
+	
+	run("Find Maxima...", "noise=&tol output=[Point Selection]");
+	getSelectionCoordinates(xp, yp);
+	nmax=xp.length;
+	wait(10);
+}
+
+print ("Retained tolerance : ",tol);
+print ("Number spot before proximity check : ",xp.length);
+
+// compute spot-to-spot distance and if 2 spots are too close, keep most prominent spot 
+toRemove = newArray();
+for (i=xp.length-1;i>=0;i--) {
+	
+	for (j=0;j<xp.length;j++) {
+		d = sqrt ((xp[i]-xp[j])*(xp[i]-xp[j])+(yp[i]-yp[j])*(yp[i]-yp[j]));
+		if ((i>j)&&(d<minSpotDistance)) {
+			toRemove = Array.concat(toRemove,i);
+			break;
+		} 
+	}
+}
+for (i=0;i<toRemove.length;i++) {
+	ri = toRemove[i];
+	xp = Array.deleteIndex(xp,ri);
+	yp = Array.deleteIndex(yp,ri);
+}
+// end filter spots for spots that are too close.	
+
+print ("Number spot after proximity check : ",xp.length);
+
+thisNuc=r;
+
+if (isOpen("segmentedParticles")) {
+	selectImage("segmentedParticles");
+	close();
+}
+
+// generate the spots territories map aka segmentedParticles
+newImage("retainedSpots", "8-bit black", getWidth, getHeight, 1);
+idspots = getImageID;
+makeSelection("point",xp,yp);
+setForegroundColor(255, 255, 255);
+run("Draw","slice");
+run("Find Maxima...", "prominence=1 output=[Segmented Particles]");
+rename("segmentedParticles");
+
+idseg = getImageID;
+selectImage(idspots);
+close();
+
+// read current nucleus parameters on the original image
+selectImage(id);
+roiManager("select", thisNuc);
+run("Enlarge...", "enlarge="+nucEnlarge); 
+List.setMeasurements();
+nucArea=List.getValue('Area');
+nucMean=List.getValue('Mean');
+nucMed=List.getValue('Median');
+nucSD=List.getValue('StdDev');
+
+// not used anymore because some spots remove with proximity check				
+// run("Find Maxima...", "noise="+(tol)+" output=[Point Selection]");
+// getSelectionCoordinates(x,y);
+
+x=xp;
+y=yp;
+
+for (i=0;i<x.length;i++) {
+	
+	// draw the nucleus outline on the segmentedParticles mask
+	selectImage(idseg);
+	roiManager("select", thisNuc);
+	run("Enlarge...", "enlarge="+nucEnlarge); 				
+	setColor(0);
+	run("Draw");
+	
+	// select the spot territory based on original spot coordinates
+	doWand(x[i], y[i]);
+	selectImage(id);
+	run("Restore Selection");
+	roiManager("add");
+	
+	// reject spot based on spot-to-nucleusMean ratio
+	sv = getPixel(x[i], y[i]);
+	tv = 1*thrFactor*nucMean;
+	if (sv<tv) {
+		roiManager('select', roiManager('count')-1);
+		roiManager('delete');
+		continue;
+	}
+	
+	// within the territory, better select spot based on intensity
+	// do some binary image cleansing
+	// select on binary image and add on image as overlay
+	setThreshold(tv,1000);
+	run("Create Selection");
+	roiManager('add');
+	roiManager('select', newArray(roiManager('count')-2,roiManager('count')-1));
+	roiManager("AND");
+	run("Create Mask");
+	run("Fill Holes");
+	run("Dilate");
+	run("Erode");
+	doWand(x[i], y[i]);
+	close();
+	run("Restore Selection");
+	run("Add Selection...");
+	
+	// read current spot parameters on the original image
+	List.setMeasurements();
+	a=List.getValue('Area');
+	iden=List.getValue('RawIntDen');
+	spotMean=List.getValue('Mean');
+	spotCirc=List.getValue('Circ.');
+	spotMinorAxis=List.getValue('Minor');
+	spotMajorAxis=List.getValue('Major');
+	spotAngle=List.getValue('Angle');
+	
+	resetThreshold();
+	// rename image to get a correct spot-level info in the results table
+	rename (title+"_"+roiName+"_spot-"+IJ.pad(i,3));
+	
+	// use Moment Calculator plugin to get additional parameters about intensity distribution in spot
+	run("Moment Calculator", "image_name total_mass x_centre y_centre x_variance y_variance xy_covariance x_skewness y_skewness x_kurtosis y_kurtosis orientation elongation cutoff=0.0000 scaling=1.0000");
+	
+	// add our results to the table created by Moment Calculator
+	setResult("spotPixArea",nResults-rtLineOffset,a);
+	getPixelSize(unit, pixelWidth, pixelHeight);
+	setResult("spotTotDen",nResults-rtLineOffset,iden);
+	setResult("spotMean",nResults-rtLineOffset,spotMean);
+	setResult("spotCirc",nResults-rtLineOffset,spotCirc);
+	setResult("spotMinorAxis",nResults-rtLineOffset,spotMinorAxis);
+	setResult("spotMajorAxis",nResults-rtLineOffset,spotMajorAxis);
+	setResult("spotAngle",nResults-rtLineOffset,spotAngle);
+	setResult("nucSqMicronArea",nResults-rtLineOffset,nucArea);
+	setResult("nucMean",nResults-rtLineOffset,nucMean);
+	setResult("nucSD",nResults-rtLineOffset,nucSD);
+	
+	// shouldn't fire anymore as those spots were rejected earlier
+	warning =0;
+	if (sv<=tv) warning=1;
+	setResult("warning",nResults-rtLineOffset,warning);
+	
+	// info about which channel the spot was detected from
+	setResult("detectinChannel",nResults-rtLineOffset,1);
+	
+	updateResults();
+	
+	// clean up roimanager from temp rois used for this spot
+	roiManager('select', roiManager('count')-1);
+	roiManager('delete');
+}
+// add all spots as overlay
+makeSelection("point",x,y);
+run("Point Tool...", "type=Circle size=Medium");
+run("Add Selection...");
+
+// close the segmentation map
+selectImage(idseg);
+close();
+setBatchMode(false);
+
+</tool>
+</line>
+
+
+<line>
+<button>
+label=Count all nuclei
+icon=noicon
+arg=<macro>
+
+count= roiManager("count");
+print ("ROI entries : ",count);
+
+colors=newArray("Red","Green","Blue","Cyan","Magenta","Yellow","White");
+id = getImageID;
+title = getTitle();
+Stack.getDimensions(width, height, channels, slices, frames);
+print("image size : ",width, height, channels, slices, frames);
+Stack.getPosition(channel, slice, frame);
+print("current position : ",channel, slice, frame);
+rtLineOffset = (1+(channels-channel));
+
+run("Set Measurements...", "display redirect=None decimal=6");
+
+sizeThr= call('ij.Prefs.get','histo.selectSmoothness',3);
+maxNSpots= call('ij.Prefs.get','histo.maxnspots',10);
+thrFactor= call('ij.Prefs.get','histo.thrFactor',1.5);
+nucEnlarge= call('ij.Prefs.get','histo.nucEnlarge',2);
+minSpotDistance= call('ij.Prefs.get','histo.minSpotDistance',4);
+
+print("\tCurrent Options : ");
+print("\tSmoothness factor", sizeThr);
+print("\tMaximum number of Spots", maxNSpots);
+print("\tSpots thresholding factor", thrFactor);
+print("\tNucleus enlargement (pix)", nucEnlarge);
+print("\tMin distance between spots (pix)", minSpotDistance);
+
+colors=newArray("Red","Green","Blue","Cyan","Magenta","Yellow","White");
+
+setBatchMode(true);
+
+for (r=0;r<count ;r++) {
+	roiManager("select", r);
+	roiName = Roi.getName();
+	print("Processing ROI : ",roiName);
+	defaultColor = Roi.getDefaultColor;
+	run("Enlarge...", "enlarge="+nucEnlarge); 
+	nmax = 1000;
+	tol=0;
+	
+	while (nmax>maxNSpots) {
+		tol++;
+		roiManager("select", r);
+		run("Enlarge...", "enlarge="+nucEnlarge); 
+		
+		run("Find Maxima...", "noise=&tol output=[Point Selection]");
+		getSelectionCoordinates(xp, yp);
+		nmax=xp.length;
+		wait(10);
+	}
+	
+	print ("Retained tolerance : ",tol);
+	print ("Number spot before proximity check : ",xp.length);
+	
+	// compute spot-to-spot distance and if 2 spots are too close, keep most prominent spot 
+	toRemove = newArray();
+	for (i=xp.length-1;i>=0;i--) {
+		
+		for (j=0;j<xp.length;j++) {
+			d = sqrt ((xp[i]-xp[j])*(xp[i]-xp[j])+(yp[i]-yp[j])*(yp[i]-yp[j]));
+			if ((i>j)&&(d<minSpotDistance)) {
+				toRemove = Array.concat(toRemove,i);
+				break;
+			} 
+		}
+	}
+	for (i=0;i<toRemove.length;i++) {
+		ri = toRemove[i];
+		xp = Array.deleteIndex(xp,ri);
+		yp = Array.deleteIndex(yp,ri);
+	}
+	// end filter spots for spots that are too close.	
+	
+	print ("Number spot after proximity check : ",xp.length);
+	
+	thisNuc=r;
+	
+	if (isOpen("segmentedParticles")) {
+		selectImage("segmentedParticles");
+		close();
+	}
+	
+	// generate the spots territories map aka segmentedParticles
+	newImage("retainedSpots", "8-bit black", getWidth, getHeight, 1);
+	idspots = getImageID;
+	makeSelection("point",xp,yp);
+	setForegroundColor(255, 255, 255);
+	run("Draw","slice");
+	run("Find Maxima...", "prominence=1 output=[Segmented Particles]");
+	rename("segmentedParticles");
+	
+	idseg = getImageID;
+	selectImage(idspots);
+	close();
+	
+	// read current nucleus parameters on the original image
+	selectImage(id);
+	roiManager("select", thisNuc);
+	run("Enlarge...", "enlarge="+nucEnlarge); 
+	List.setMeasurements();
+	nucArea=List.getValue('Area');
+	nucMean=List.getValue('Mean');
+	nucMed=List.getValue('Median');
+	nucSD=List.getValue('StdDev');
+	
+	// not used anymore because some spots remove with proximity check				
+	// run("Find Maxima...", "noise="+(tol)+" output=[Point Selection]");
+	// getSelectionCoordinates(x,y);
+	
+	x=xp;
+	y=yp;
+	
+	for (i=0;i<x.length;i++) {
+		
+		// draw the nucleus outline on the segmentedParticles mask
+		selectImage(idseg);
+		roiManager("select", thisNuc);
+		run("Enlarge...", "enlarge="+nucEnlarge); 				
+		setColor(0);
+		run("Draw");
+		
+		// select the spot territory based on original spot coordinates
+		doWand(x[i], y[i]);
+		selectImage(id);
+		run("Restore Selection");
+		roiManager("add");
+		
+		// reject spot based on spot-to-nucleusMean ratio
+		sv = getPixel(x[i], y[i]);
+		tv = 1*thrFactor*nucMean;
+		if (sv<tv) {
+			roiManager('select', roiManager('count')-1);
+			roiManager('delete');
+			continue;
+		}
+		
+		// within the territory, better select spot based on intensity
+		// do some binary image cleansing
+		// select on binary image and add on image as overlay
+		setThreshold(tv,1000);
+		run("Create Selection");
+		roiManager('add');
+		roiManager('select', newArray(roiManager('count')-2,roiManager('count')-1));
+		roiManager("AND");
+		run("Create Mask");
+		run("Fill Holes");
+		run("Dilate");
+		run("Erode");
+		doWand(x[i], y[i]);
+		close();
+		run("Restore Selection");
+		run("Add Selection...");
+		
+		// read current spot parameters on the original image
+		List.setMeasurements();
+		a=List.getValue('Area');
+		iden=List.getValue('RawIntDen');
+		spotMean=List.getValue('Mean');
+		spotCirc=List.getValue('Circ.');
+		spotMinorAxis=List.getValue('Minor');
+		spotMajorAxis=List.getValue('Major');
+		spotAngle=List.getValue('Angle');
+		
+		resetThreshold();
+		// rename image to get a correct spot-level info in the results table
+		rename (title+"_"+roiName+"_spot-"+IJ.pad(i,3));
+		
+		// use Moment Calculator plugin to get additional parameters about intensity distribution in spot
+		run("Moment Calculator", "image_name total_mass x_centre y_centre x_variance y_variance xy_covariance x_skewness y_skewness x_kurtosis y_kurtosis orientation elongation cutoff=0.0000 scaling=1.0000");
+		
+		// add our results to the table created by Moment Calculator
+		setResult("spotPixArea",nResults-rtLineOffset,a);
+		getPixelSize(unit, pixelWidth, pixelHeight);
+		setResult("spotTotDen",nResults-rtLineOffset,iden);
+		setResult("spotMean",nResults-rtLineOffset,spotMean);
+		setResult("spotCirc",nResults-rtLineOffset,spotCirc);
+		setResult("spotMinorAxis",nResults-rtLineOffset,spotMinorAxis);
+		setResult("spotMajorAxis",nResults-rtLineOffset,spotMajorAxis);
+		setResult("spotAngle",nResults-rtLineOffset,spotAngle);
+		setResult("nucSqMicronArea",nResults-rtLineOffset,nucArea);
+		setResult("nucMean",nResults-rtLineOffset,nucMean);
+		setResult("nucSD",nResults-rtLineOffset,nucSD);
+		
+		// shouldn't fire anymore as those spots were rejected earlier
+		warning =0;
+		if (sv<=tv) warning=1;
+		setResult("warning",nResults-rtLineOffset,warning);
+		
+		// info about which channel the spot was detected from
+		setResult("detectinChannel",nResults-rtLineOffset,1);
+		
+		updateResults();
+		
+		// clean up roimanager from temp rois used for this spot
+		roiManager('select', roiManager('count')-1);
+		roiManager('delete');
+	}
+	// add all spots as overlay
+	makeSelection("point",x,y);
+	run("Point Tool...", "type=Circle size=Medium");
+	run("Add Selection...");
+	
+	// close the segmentation map
+	selectImage(idseg);
+	close();
+}
+setBatchMode(false);
+
+
+
+</macro>
+</line>
+
+<line>
+<button>
+label=Process folder
+icon=noicon
+arg=<macro>
+
+
+acceptedTypes = "lsm,czi,tif,jpg";
+dir = getDirectory("Select folder to process");
+liste = getFileList(dir);
+for (f=0;f<liste.length;f++) {
+	ext = toLowerCase(substring(liste[f],maxOf(0,1+lastIndexOf(liste[f],"."))));
+	if (indexOf(acceptedTypes,ext)>0) {
+		fname = substring(liste[f],0,lastIndexOf(liste[f],"."));
+		roifname  = fname+".zip";
+		
+		if (File.exists(dir+roifname)){
+			run("Close All");
+			print ("Opening : ",dir+liste[f]);
+			run("Bio-Formats Importer", "open=["+dir+liste[f]+"] color_mode=Default view=Hyperstack stack_order=XYCZT");
+			
+			roiManager("reset");
+			roiManager("Open", dir+roifname);
+			count= roiManager("count");
+			print ("ROI entries : ",count);
+			
+			colors=newArray("Red","Green","Blue","Cyan","Magenta","Yellow","White");
+			id = getImageID;
+			title = getTitle();
+			Stack.getDimensions(width, height, channels, slices, frames);
+			print("image size : ",width, height, channels, slices, frames);
+			Stack.getPosition(channel, slice, frame);
+			print("current position : ",channel, slice, frame);
+			rtLineOffset = (1+(channels-channel));
+			
+			run("Set Measurements...", "display redirect=None decimal=6");
+			
+			sizeThr= call('ij.Prefs.get','histo.selectSmoothness',3);
+			maxNSpots= call('ij.Prefs.get','histo.maxnspots',10);
+			thrFactor= call('ij.Prefs.get','histo.thrFactor',1.5);
+			nucEnlarge= call('ij.Prefs.get','histo.nucEnlarge',2);
+			minSpotDistance= call('ij.Prefs.get','histo.minSpotDistance',4);
+			
+			print("\tCurrent Options : ");
+			print("\tSmoothness factor", sizeThr);
+			print("\tMaximum number of Spots", maxNSpots);
+			print("\tSpots thresholding factor", thrFactor);
+			print("\tNucleus enlargement (pix)", nucEnlarge);
+			print("\tMin distance between spots (pix)", minSpotDistance);
+			
+			colors=newArray("Red","Green","Blue","Cyan","Magenta","Yellow","White");
+			
+			setBatchMode(true);
+			
+			for (r=0;r<count ;r++) {
+				roiManager("select", r);
+				roiName = Roi.getName();
+				print("Processing ROI : ",roiName);
+				defaultColor = Roi.getDefaultColor;
+				run("Enlarge...", "enlarge="+nucEnlarge); 
+				nmax = 1000;
+				tol=0;
+				
+				while (nmax>maxNSpots) {
+					tol++;
+					roiManager("select", r);
+					run("Enlarge...", "enlarge="+nucEnlarge); 
+					
+					run("Find Maxima...", "noise=&tol output=[Point Selection]");
+					getSelectionCoordinates(xp, yp);
+					nmax=xp.length;
+					wait(10);
+				}
+				
+				print ("Retained tolerance : ",tol);
+				print ("Number spot before proximity check : ",xp.length);
+				
+				// compute spot-to-spot distance and if 2 spots are too close, keep most prominent spot 
+				toRemove = newArray();
+				for (i=xp.length-1;i>=0;i--) {
+					
+					for (j=0;j<xp.length;j++) {
+						d = sqrt ((xp[i]-xp[j])*(xp[i]-xp[j])+(yp[i]-yp[j])*(yp[i]-yp[j]));
+						if ((i>j)&&(d<minSpotDistance)) {
+							toRemove = Array.concat(toRemove,i);
+							break;
+						} 
+					}
+				}
+				for (i=0;i<toRemove.length;i++) {
+					ri = toRemove[i];
+					xp = Array.deleteIndex(xp,ri);
+					yp = Array.deleteIndex(yp,ri);
+				}
+				// end filter spots for spots that are too close.	
+				
+				print ("Number spot after proximity check : ",xp.length);
+				
+				thisNuc=r;
+				
+				if (isOpen("segmentedParticles")) {
+					selectImage("segmentedParticles");
+					close();
+				}
+				
+				// generate the spots territories map aka segmentedParticles
+				newImage("retainedSpots", "8-bit black", getWidth, getHeight, 1);
+				idspots = getImageID;
+				makeSelection("point",xp,yp);
+				setForegroundColor(255, 255, 255);
+				run("Draw","slice");
+				run("Find Maxima...", "prominence=1 output=[Segmented Particles]");
+				rename("segmentedParticles");
+				
+				idseg = getImageID;
+				selectImage(idspots);
+				close();
+				
+				// read current nucleus parameters on the original image
+				selectImage(id);
+				roiManager("select", thisNuc);
+				run("Enlarge...", "enlarge="+nucEnlarge); 
+				List.setMeasurements();
+				nucArea=List.getValue('Area');
+				nucMean=List.getValue('Mean');
+				nucMed=List.getValue('Median');
+				nucSD=List.getValue('StdDev');
+				
+				// not used anymore because some spots remove with proximity check				
+				// run("Find Maxima...", "noise="+(tol)+" output=[Point Selection]");
+				// getSelectionCoordinates(x,y);
+				
+				x=xp;
+				y=yp;
+				
+				for (i=0;i<x.length;i++) {
+					
+					// draw the nucleus outline on the segmentedParticles mask
+					selectImage(idseg);
+					roiManager("select", thisNuc);
+					run("Enlarge...", "enlarge="+nucEnlarge); 				
+					setColor(0);
+					run("Draw");
+					
+					// select the spot territory based on original spot coordinates
+					doWand(x[i], y[i]);
+					selectImage(id);
+					run("Restore Selection");
+					roiManager("add");
+					
+					// reject spot based on spot-to-nucleusMean ratio
+					sv = getPixel(x[i], y[i]);
+					tv = 1*thrFactor*nucMean;
+					if (sv<tv) {
+						roiManager('select', roiManager('count')-1);
+						roiManager('delete');
+						continue;
+					}
+					
+					// within the territory, better select spot based on intensity
+					// do some binary image cleansing
+					// select on binary image and add on image as overlay
+					setThreshold(tv,1000);
+					run("Create Selection");
+					roiManager('add');
+					roiManager('select', newArray(roiManager('count')-2,roiManager('count')-1));
+					roiManager("AND");
+					run("Create Mask");
+					run("Fill Holes");
+					run("Dilate");
+					run("Erode");
+					doWand(x[i], y[i]);
+					close();
+					run("Restore Selection");
+					run("Add Selection...");
+					
+					// read current spot parameters on the original image
+					List.setMeasurements();
+					a=List.getValue('Area');
+					iden=List.getValue('RawIntDen');
+					spotMean=List.getValue('Mean');
+					spotCirc=List.getValue('Circ.');
+					spotMinorAxis=List.getValue('Minor');
+					spotMajorAxis=List.getValue('Major');
+					spotAngle=List.getValue('Angle');
+					
+					resetThreshold();
+					// rename image to get a correct spot-level info in the results table
+					rename (title+"_"+roiName+"_spot-"+IJ.pad(i,3));
+					
+					// use Moment Calculator plugin to get additional parameters about intensity distribution in spot
+					run("Moment Calculator", "image_name total_mass x_centre y_centre x_variance y_variance xy_covariance x_skewness y_skewness x_kurtosis y_kurtosis orientation elongation cutoff=0.0000 scaling=1.0000");
+					
+					// add our results to the table created by Moment Calculator
+					setResult("spotPixArea",nResults-rtLineOffset,a);
+					getPixelSize(unit, pixelWidth, pixelHeight);
+					setResult("spotTotDen",nResults-rtLineOffset,iden);
+					setResult("spotMean",nResults-rtLineOffset,spotMean);
+					setResult("spotCirc",nResults-rtLineOffset,spotCirc);
+					setResult("spotMinorAxis",nResults-rtLineOffset,spotMinorAxis);
+					setResult("spotMajorAxis",nResults-rtLineOffset,spotMajorAxis);
+					setResult("spotAngle",nResults-rtLineOffset,spotAngle);
+					setResult("nucSqMicronArea",nResults-rtLineOffset,nucArea);
+					setResult("nucMean",nResults-rtLineOffset,nucMean);
+					setResult("nucSD",nResults-rtLineOffset,nucSD);
+					
+					// shouldn't fire anymore as those spots were rejected earlier
+					warning =0;
+					if (sv<=tv) warning=1;
+					setResult("warning",nResults-rtLineOffset,warning);
+					
+					// info about which channel the spot was detected from
+					setResult("detectinChannel",nResults-rtLineOffset,1);
+					
+					updateResults();
+					
+					// clean up roimanager from temp rois used for this spot
+					roiManager('select', roiManager('count')-1);
+					roiManager('delete');
+				}
+				// add all spots as overlay
+				makeSelection("point",x,y);
+				run("Point Tool...", "type=Circle size=Medium");
+				run("Add Selection...");
+				
+				// close the segmentation map
+				selectImage(idseg);
+				close();
+			}
+			setBatchMode(false);
+			
+		}
+	}
+}
+
+</macro>
+</line>
+
+<line>
+<button>
+label=Remove clicked ROI
+icon=noicon
+arg=<tool>
+getCursorLoc(x0, y0, z, flags);
+id = getImageID;
+for (i=0;i< roiManager("count");i++) {
+    roiManager("select", i);
+    if (Roi.contains(x0,y0)) break;
+}
+roiManager("delete");
+</tool>
+</line>
+
+
+<line>
+<button>
+label=Remove all ROIs
+icon=noicon
+arg=<macro>
+roiManager("reset");
+run("Remove Overlay");
+run("Select None");
+</macro>
+</line>
+
+<line>
+<button>
+label=Save ROIs file
+icon=noicon
+arg=<macro>
+t=getTitle();
+//run("To ROI Manager");
+if (isOpen("ROI Manager")) {
+    roiManager("Deselect");
+    roiManager("Save", getInfo('image.directory')+File.separator+t+"_RoiSet.zip");
+    roiManager("reset");
+    selectWindow("ROI Manager");
+    roiManager("show all with labels");
+}
+</macro>
+</line>
+
+<line>
+<button>
+label=Reject Spots
+icon=noicon
+arg=<macro>
+if (!isOpen("Results")) exit("You need a Results table for this");
+f = 1*(call("ij.Prefs.get","ab.spotValidation",1));
+Dialog.create("Filter");
+Dialog.addMessage("Remove spots with: \n \nspotMean < f * nucMean\n");
+Dialog.addNumber('f=', f, 2, 10, '');
+Dialog.show();
+f= Dialog.getNumber();
+call("ij.Prefs.set","ab.spotValidation",f);
+
+for(i=nResults-1; i>=0; i--) {
+    sm=getResult('spotMean',i);    
+    nm=getResult('nucMean',i);
+    if (sm<(nm*f)) {
+    	//setResult('toBeDeleted',i,1);
+    	Table.deleteRows(i, i);
+    } else {
+    	setResult('toBeDeleted',i,0);
+    }
+}
+updateResults();
+</macro>
+</line>
+
+<line>
+<button>
+label=RT Spots -> image
+icon=noicon
+arg=<macro>
+run('Select None');
+for(i=0; i<nResults; i++) {
+    xc=getResult('xC',i);    
+    yc=getResult('yC',i);
+    toUnscaled(xc);
+    toUnscaled(yc);
+    setKeyDown('shift');
+    makePoint(xc, yc);
+}
+</macro>
+</line>
+
+
+
+
+
+<startupAction>
+
+print ("Nouvelle session 'NucSeg'");
+getDateAndTime(year, month, dayOfWeek, dayOfMonth, hour, minute, second, msec);
+print (year+"-"+IJ.pad(month,2)+"-"+IJ.pad(dayOfMonth,2)+" "+IJ.pad(hour,2)+":"+IJ.pad(minute,2)+":"+IJ.pad(second,2));
+
+newUID();
+run("ROI Manager...");
+</startupAction>
+<onTop>
+<codeLibrary>
+
+function closeByTitle(s) {
+    if (isOpen(s)) { selectWindow(s); run("Close");}
+}
+
+function newUID() {
+    getDateAndTime(year, month, dayOfWeek, dayOfMonth, hour, minute, second, msec);
+    uid = ""+year+""+IJ.pad(month,2)+""+IJ.pad(dayOfMonth,2)+""+IJ.pad(hour,2)+""+IJ.pad(minute,2)+""+IJ.pad(second,2);
+    call ('ij.Prefs.set','rois.uid',uid);
+    print("New experiment. UID: "+uid);
+}
+</codeLibrary>
